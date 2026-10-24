@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Quiz & Flashcards</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main>
+    <h1>Quiz & Flashcards</h1>
+
+    <!-- MENU -->
+    <section id="menu">
+      <label for="category">Category</label>
+      <select id="category"></select>
+      <p id="best" class="muted"></p>
+      <div class="row">
+        <button id="start-quiz" class="primary">Start quiz</button>
+        <button id="start-cards">Study flashcards</button>
+      </div>
+    </section>
+
+    <!-- QUIZ -->
+    <section id="quiz" hidden>
+      <div class="row between muted">
+        <span id="progress"></span>
+        <span id="score"></span>
+      </div>
+      <div class="timer"><div id="timer-bar"></div></div>
+      <p class="muted"><span id="timer">15s</span> left</p>
+      <h2 id="question"></h2>
+      <div id="options"></div>
+      <p id="feedback" class="feedback"></p>
+      <div class="row">
+        <button id="next" class="primary" hidden>Next question</button>
+        <button id="quit">Quit</button>
+      </div>
+    </section>
+
+    <!-- RESULT -->
+    <section id="result" hidden>
+      <h2>Quiz complete</h2>
+      <p class="big" id="final-score"></p>
+      <p id="summary"></p>
+      <div id="review"></div>
+      <div class="row">
+        <button id="play-again" class="primary">Play again</button>
+        <button id="to-menu">Menu</button>
+      </div>
+    </section>
+
+    <!-- FLASHCARDS -->
+    <section id="flashcards" hidden>
+      <p class="muted" id="card-progress"></p>
+      <button id="card" class="card" aria-label="Flip card">
+        <span class="card-label" id="card-label"></span>
+        <span id="card-text"></span>
+        <span class="card-hint">Tap to flip</span>
+      </button>
+      <p id="done" class="big" hidden>All cards learned! 🎉</p>
+      <div class="row">
+        <button id="again">Review again</button>
+        <button id="know" class="primary">I know it</button>
+      </div>
+      <div class="row">
+        <button id="cards-menu">Menu</button>
+      </div>
+    </section>
+  </main>
+
+  <script src="questions.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
