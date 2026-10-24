@@ -1,0 +1,252 @@
+const TIME_PER_QUESTION = 15; // seconds
+const QUESTIONS_PER_QUIZ = 8;
+
+const $ = (id) => document.getElementById(id);
+const screens = ["menu", "quiz", "result", "flashcards"];
+
+function show(name) {
+  for (const s of screens) $(s).hidden = s !== name;
+}
+
+// Fisher-Yates shuffle (returns a new array)
+function shuffle(items) {
+  const a = [...items];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function questionsFor(category) {
+  return category === "All" ? QUESTIONS : QUESTIONS.filter((q) => q.category === category);
+}
+
+// ---------- Best scores (saved in the browser) ----------
+function loadBest() {
+  try {
+    return JSON.parse(localStorage.getItem("quiz-best")) || {};
+  } catch {
+    return {};
+  }
+}
+
+function saveBest(category, score) {
+  try {
+    const best = loadBest();
+    if (score > (best[category] || 0)) {
+      best[category] = score;
+      localStorage.setItem("quiz-best", JSON.stringify(best));
+      return true;
+    }
+  } catch {
+    // Storage unavailable (private mode, etc.): the app still works
+  }
+  return false;
+}
+
+// ---------- Menu ----------
+function setupMenu() {
+  const select = $("category");
+  const categories = ["All", ...new Set(QUESTIONS.map((q) => q.category))];
+  for (const c of categories) {
+    const option = document.createElement("option");
+    option.textContent = c;
+    select.appendChild(option);
+  }
+  select.addEventListener("change", renderBest);
+  renderBest();
+}
+
+function renderBest() {
+  const best = loadBest()[$("category").value];
+  $("best").textContent = best ? `Best score: ${best}` : "No best score yet.";
+}
+
+function goToMenu() {
+  if (quiz) clearInterval(quiz.timerId);
+  renderBest();
+  show("menu");
+}
+
+// ---------- Quiz ----------
+let quiz = null;
+
+function startQuiz() {
+  const category = $("category").value;
+  quiz = {
+    category,
+    questions: shuffle(questionsFor(category)).slice(0, QUESTIONS_PER_QUIZ),
+    index: 0,
+    score: 0,
+    correct: 0,
+    missed: [],
+    timerId: null,
+    timeLeft: 0,
+    answered: false,
+  };
+  show("quiz");
+  showQuestion();
+}
+
+function showQuestion() {
+  const q = quiz.questions[quiz.index];
+  quiz.answered = false;
+
+  $("progress").textContent = `Question ${quiz.index + 1} / ${quiz.questions.length}`;
+  $("score").textContent = `Score: ${quiz.score}`;
+  $("question").textContent = q.question;
+  $("feedback").textContent = "";
+  $("next").hidden = true;
+
+  const box = $("options");
+  box.replaceChildren();
+  const options = shuffle(q.options.map((text, i) => ({ text, correct: i === q.answer })));
+  for (const opt of options) {
+    const btn = document.createElement("button");
+    btn.className = "option";
+    btn.textContent = opt.text;
+    btn.dataset.correct = opt.correct;
+    btn.addEventListener("click", () => resolveQuestion(btn));
+    box.appendChild(btn);
+  }
+  startTimer();
+}
+
+function startTimer() {
+  clearInterval(quiz.timerId);
+  quiz.timeLeft = TIME_PER_QUESTION;
+  renderTimer();
+  quiz.timerId = setInterval(() => {
+    quiz.timeLeft--;
+    renderTimer();
+    if (quiz.timeLeft <= 0) resolveQuestion(null); // time ran out
+  }, 1000);
+}
+
+function renderTimer() {
+  $("timer").textContent = `${quiz.timeLeft}s`;
+  $("timer-bar").style.width = `${(quiz.timeLeft / TIME_PER_QUESTION) * 100}%`;
+}
+
+// chosenBtn is the clicked button, or null when time runs out
+function resolveQuestion(chosenBtn) {
+  if (quiz.answered) return;
+  quiz.answered = true;
+  clearInterval(quiz.timerId);
+
+  const q = quiz.questions[quiz.index];
+  const isCorrect = chosenBtn !== null && chosenBtn.dataset.correct === "true";
+
+  for (const btn of $("options").children) {
+    btn.disabled = true;
+    if (btn.dataset.correct === "true") btn.classList.add("correct");
+  }
+
+  if (isCorrect) {
+    const points = 10 + quiz.timeLeft; // faster answers earn a bonus
+    quiz.score += points;
+    quiz.correct++;
+    $("feedback").textContent = `Correct! +${points} points`;
+  } else {
+    if (chosenBtn) chosenBtn.classList.add("wrong");
+    quiz.missed.push({ question: q.question, answer: q.options[q.answer] });
+    $("feedback").textContent = chosenBtn ? "Not quite." : "Time's up!";
+  }
+
+  $("score").textContent = `Score: ${quiz.score}`;
+  const isLast = quiz.index === quiz.questions.length - 1;
+  $("next").textContent = isLast ? "See results" : "Next question";
+  $("next").hidden = false;
+}
+
+function nextQuestion() {
+  quiz.index++;
+  if (quiz.index >= quiz.questions.length) showResult();
+  else showQuestion();
+}
+
+function showResult() {
+  const isRecord = saveBest(quiz.category, quiz.score);
+  $("final-score").textContent = `${quiz.score} points`;
+  $("summary").textContent =
+    `${quiz.correct} / ${quiz.questions.length} correct` + (isRecord ? " 🏆 New best score!" : "");
+
+  const review = $("review");
+  review.replaceChildren();
+  if (quiz.missed.length === 0) {
+    review.textContent = "Perfect round! 🎉";
+  } else {
+    const heading = document.createElement("h3");
+    heading.textContent = "Review your mistakes";
+    review.appendChild(heading);
+    for (const m of quiz.missed) {
+      const p = document.createElement("p");
+      p.textContent = `${m.question} → ${m.answer}`;
+      review.appendChild(p);
+    }
+  }
+  show("result");
+}
+
+// ---------- Flashcards ----------
+let deck = [];
+let knownCount = 0;
+let totalCards = 0;
+let flipped = false;
+
+function startFlashcards() {
+  deck = shuffle(questionsFor($("category").value));
+  totalCards = deck.length;
+  knownCount = 0;
+  show("flashcards");
+  renderCard();
+}
+
+function renderCard() {
+  flipped = false;
+  const finished = deck.length === 0;
+  $("card").hidden = finished;
+  $("know").hidden = finished;
+  $("again").hidden = finished;
+  $("done").hidden = !finished;
+  $("card-progress").textContent = `Learned ${knownCount} / ${totalCards}`;
+  if (finished) return;
+
+  const card = deck[0];
+  $("card-label").textContent = `${card.category} · Question`;
+  $("card-text").textContent = card.question;
+}
+
+function flipCard() {
+  if (deck.length === 0) return;
+  flipped = !flipped;
+  const card = deck[0];
+  $("card-label").textContent = `${card.category} · ${flipped ? "Answer" : "Question"}`;
+  $("card-text").textContent = flipped ? card.options[card.answer] : card.question;
+}
+
+function knowCard() {
+  deck.shift(); // remove from the deck
+  knownCount++;
+  renderCard();
+}
+
+function reviewCardAgain() {
+  deck.push(deck.shift()); // move to the back of the deck
+  renderCard();
+}
+
+// ---------- Wire up buttons ----------
+$("start-quiz").addEventListener("click", startQuiz);
+$("start-cards").addEventListener("click", startFlashcards);
+$("next").addEventListener("click", nextQuestion);
+$("quit").addEventListener("click", goToMenu);
+$("play-again").addEventListener("click", startQuiz);
+$("to-menu").addEventListener("click", goToMenu);
+$("card").addEventListener("click", flipCard);
+$("know").addEventListener("click", knowCard);
+$("again").addEventListener("click", reviewCardAgain);
+$("cards-menu").addEventListener("click", goToMenu);
+
+setupMenu();
